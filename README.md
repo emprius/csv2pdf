@@ -12,8 +12,8 @@ A GUI application that generates PDFs from a template by combining it with text 
 ### Option 2: Build from Source
 1. Clone the repository
 2. Install make: `sudo apt install make` (on Debian/Ubuntu) or `sudo pacman -S make` (on Arch)
-3. Run `make build` to create the portable binary
-4. The binary will be created in the `dist` directory
+3. Run `make install` and `make run` to run the program.
+4. Run `make build` to create the portable binary. The binary will be created in the `dist` directory
 
 ## Features
 

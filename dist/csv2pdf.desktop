@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=CSV2PDF
+Exec=csv2pdf
+Type=Application
+Terminal=false
