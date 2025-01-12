@@ -49,10 +49,9 @@ def wrap_text(text, max_chars):
             lines.append('')
             continue
             
-        # Skip whitespace at start of line, but preserve indentation
+        # Preserve all whitespace at start of line
         if not current_line and word.isspace():
-            if word.startswith('    '):  # Preserve tab indentation (4 spaces)
-                current_line = word
+            current_line = word
             continue
             
         # Check if adding word would exceed max_chars
