@@ -1,5 +1,6 @@
 import os
 import csv
+import json
 from tkinter import Tk, filedialog, messagebox, StringVar, Label, Entry, Button, OptionMenu, Frame, Scrollbar, Text, font
 from tkinter.ttk import Button as TtkButton, Style
 from reportlab.lib.pagesizes import letter
@@ -338,6 +339,50 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
         messagebox.showerror("Error", str(e))
 
 
+def save_settings(settings):
+    """Save settings to JSON file"""
+    settings_dir = os.path.expanduser("~/.emprius_donacions")
+    settings_file = os.path.join(settings_dir, "settings.json")
+    
+    try:
+        # Create settings directory if it doesn't exist
+        os.makedirs(settings_dir, exist_ok=True)
+        
+        with open(settings_file, 'w') as f:
+            json.dump(settings, f, indent=4)
+    except Exception as e:
+        print(f"Error saving settings: {e}")
+
+def load_settings():
+    """Load settings from JSON file"""
+    settings_file = os.path.expanduser("~/.emprius_donacions/settings.json")
+    default_settings = {
+        "font_name": "Helvetica",
+        "font_size": "12",
+        "x_percent": "10",
+        "y_percent": "20",
+        "max_chars": "80",
+        "filename_prefix": "emprius_{name}.pdf",
+        "template_path": "",
+        "csv_path": "",
+        "output_dir": "",
+        "text_content": ""
+    }
+    
+    try:
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r') as f:
+                settings = json.load(f)
+                # Update with any missing default settings
+                for key, value in default_settings.items():
+                    if key not in settings:
+                        settings[key] = value
+                return settings
+    except Exception as e:
+        print(f"Error loading settings: {e}")
+    
+    return default_settings
+
 def update_csv_headers(csv_path_var, headers_var):
     try:
         csv_path = csv_path_var.get()
@@ -359,15 +404,52 @@ def main():
     style = Style()
     style.configure('Toolbar.TButton', padding=4)
 
-    template_var = StringVar()
-    csv_var = StringVar()
-    output_dir_var = StringVar()
-    filename_prefix_var = StringVar(value="e.g. emprius_{name}.pdf")
-    font_var = StringVar()
-    font_size_var = StringVar(value="12")
-    x_percent_var = StringVar(value="10")
-    y_percent_var = StringVar(value="20")
-    max_chars_var = StringVar(value="80")
+    # Load saved settings
+    settings = load_settings()
+
+    template_var = StringVar(value=settings["template_path"])
+    csv_var = StringVar(value=settings["csv_path"])
+    output_dir_var = StringVar(value=settings["output_dir"])
+    filename_prefix_var = StringVar(value=settings["filename_prefix"])
+    font_var = StringVar(value=settings["font_name"])
+    font_size_var = StringVar(value=settings["font_size"])
+    x_percent_var = StringVar(value=settings["x_percent"])
+    y_percent_var = StringVar(value=settings["y_percent"])
+    max_chars_var = StringVar(value=settings["max_chars"])
+
+    # Function to save current settings
+    def save_current_settings(*args):
+        current_settings = {
+            "template_path": template_var.get(),
+            "csv_path": csv_var.get(),
+            "output_dir": output_dir_var.get(),
+            "filename_prefix": filename_prefix_var.get(),
+            "font_name": font_var.get(),
+            "font_size": font_size_var.get(),
+            "x_percent": x_percent_var.get(),
+            "y_percent": y_percent_var.get(),
+            "max_chars": max_chars_var.get(),
+            "text_content": text_widget.get("1.0", "end-1c") if text_widget.get("1.0", "end-1c") != "Type your text here..." else ""
+        }
+        save_settings(current_settings)
+
+    # Track changes to save settings
+    template_var.trace_add("write", save_current_settings)
+    csv_var.trace_add("write", save_current_settings)
+    output_dir_var.trace_add("write", save_current_settings)
+    filename_prefix_var.trace_add("write", save_current_settings)
+    font_var.trace_add("write", save_current_settings)
+    font_size_var.trace_add("write", save_current_settings)
+    x_percent_var.trace_add("write", save_current_settings)
+    y_percent_var.trace_add("write", save_current_settings)
+    max_chars_var.trace_add("write", save_current_settings)
+
+    # Save settings when window is closed
+    def on_closing():
+        save_current_settings()
+        root.destroy()
+    
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     headers_var = StringVar(value="You can use \\n for new line and \\t for tab (4 spaces). Select a CSV file to see available tags.")
 
     def get_custom_text():
@@ -518,8 +600,20 @@ def main():
             text_widget.delete("1.0", "end")
             text_widget.unbind('<Button-1>')
     
-    text_widget.insert("1.0", "Type your text here...")
-    text_widget.bind('<Button-1>', clear_default_text)
+    # Load saved text content or show default
+    saved_text = settings.get("text_content", "")
+    if saved_text:
+        text_widget.insert("1.0", saved_text)
+    else:
+        text_widget.insert("1.0", "Type your text here...")
+        text_widget.bind('<Button-1>', clear_default_text)
+
+    # Save text content when it changes
+    def on_text_change(event=None):
+        if text_widget.get("1.0", "end-1c") != "Type your text here...":
+            save_current_settings()
+    
+    text_widget.bind('<<Modified>>', on_text_change)
 
     Label(root, textvariable=headers_var, wraplength=400, justify="left").grid(row=5, column=1)
 
