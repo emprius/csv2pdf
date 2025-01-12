@@ -2,3 +2,4 @@ reportlab
 pillow
 pypdf2
 tkrichtext
+pyinstaller

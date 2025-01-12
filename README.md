@@ -2,6 +2,19 @@
 
 A GUI application that generates PDFs from a template by combining it with text content and data from a CSV file. The application allows you to add formatted text with tags that get replaced with values from the CSV file.
 
+## Installation
+
+### Option 1: Download Portable Binary (Recommended)
+1. Download the latest `pdf_generator` binary from the releases page
+2. Make it executable: `chmod +x pdf_generator`
+3. Double-click to run, or run from terminal: `./pdf_generator`
+
+### Option 2: Build from Source
+1. Clone the repository
+2. Install make: `sudo apt install make` (on Debian/Ubuntu) or `sudo pacman -S make` (on Arch)
+3. Run `make build` to create the portable binary
+4. The binary will be created in the `dist` directory
+
 ## Features
 
 - Load a PDF template
