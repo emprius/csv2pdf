@@ -224,62 +224,68 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                     y_start = y * letter[1]
                     y_pos = letter[1] - y_start
                     
-                    # Draw text with continuous flow
-                    x_offset = x * letter[0]
-                    current_line = []  # List of (text, format) tuples for current line
+                    # First, combine all text while preserving formatting
+                    combined_text = ""
+                    format_ranges = []  # List of (start, end, formats) tuples
+                    current_pos = 0
                     
                     for text, formats in processed_text:
-                        if not text.strip():
-                            # Draw current line if exists
-                            if current_line:
-                                x_pos = x_offset
-                                for segment, seg_formats in current_line:
-                                    # Apply font formatting
-                                    # Apply font formatting with proper italic handling
-                                    if 'italic' in seg_formats:
-                                        current_font = italic_font
-                                        if 'bold' in seg_formats:
-                                            current_font = bold_italic_font
-                                    elif 'bold' in seg_formats:
-                                        current_font = bold_font
-                                    else:
-                                        current_font = base_font
-                                    
-                                    # Set font and draw text segment
-                                    c.setFont(current_font, font_size)
-                                    c.drawString(x_pos, y_pos, segment)
-                                    
-                                    # Add underline if needed
-                                    if 'underline' in seg_formats:
-                                        width = c.stringWidth(segment, current_font, font_size)
-                                        y_underline = y_pos - 1.5
-                                        c.setLineWidth(0.5)
-                                        c.line(x_pos, y_underline, x_pos + width, y_underline)
-                                    
-                                    x_pos += c.stringWidth(segment, current_font, font_size)
-                                y_pos -= line_height
-                                current_line = []
+                        if text:
+                            start = current_pos
+                            combined_text += text
+                            end = current_pos + len(text)
+                            if formats:  # Only store if there's formatting
+                                format_ranges.append((start, end, formats))
+                            current_pos = end
+                    
+                    # Wrap text according to max_chars
+                    wrapped_lines = wrap_text(combined_text, max_chars)
+                    
+                    # Draw text line by line
+                    x_offset = x * letter[0]
+                    
+                    for line in wrapped_lines:
+                        if not line.strip():  # Handle empty lines
                             y_pos -= line_height
                             continue
-                        
-                        # Split text into words
-                        words = text.split()
-                        for word in words:
-                            # Calculate width of current line plus new word
-                            test_width = x_offset
-                            for segment, seg_formats in current_line:
-                                # Apply font formatting with proper italic handling
-                                if 'italic' in seg_formats:
-                                    current_font = italic_font
-                                    if 'bold' in seg_formats:
-                                        current_font = bold_italic_font
-                                elif 'bold' in seg_formats:
-                                    current_font = bold_font
-                                else:
-                                    current_font = base_font
-                                test_width += c.stringWidth(segment, current_font, font_size)
                             
-                            # Calculate width of new word
+                        x_pos = x_offset
+                        current_pos = combined_text.find(line)
+                        
+                        # Split line into segments based on formatting
+                        segments = []
+                        current_segment_start = 0
+                        current_formats = []
+                        
+                        for i in range(len(line)):
+                            pos_in_text = current_pos + i
+                            new_formats = []
+                            
+                            # Find all formats that apply to this position
+                            for start, end, formats in format_ranges:
+                                if start <= pos_in_text < end:
+                                    new_formats.extend(formats)
+                            
+                            # If formats changed, end current segment and start new one
+                            if new_formats != current_formats:
+                                if i > current_segment_start:
+                                    segments.append((
+                                        line[current_segment_start:i],
+                                        current_formats
+                                    ))
+                                current_segment_start = i
+                                current_formats = new_formats
+                        
+                        # Add final segment
+                        if current_segment_start < len(line):
+                            segments.append((
+                                line[current_segment_start:],
+                                current_formats
+                            ))
+                        
+                        # Draw segments
+                        for i, (segment, formats) in enumerate(segments):
+                            # Apply font formatting
                             if 'italic' in formats:
                                 current_font = italic_font
                                 if 'bold' in formats:
@@ -289,102 +295,22 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                             else:
                                 current_font = base_font
                             
-                            # Add space width if not first word on line
-                            space_width = c.stringWidth(" ", current_font, font_size) if current_line else 0
-                            word_width = c.stringWidth(word, current_font, font_size)
-                            total_width = test_width + space_width + word_width
-                            
-                            # Check if word fits on current line
-                            if total_width > letter[0] * 0.8:  # 80% of page width
-                                # Draw current line
-                                if current_line:
-                                    x_pos = x_offset
-                                    line_text = ""
-                                    line_segments = []
-                                    
-                                    # First collect all segments
-                                    for segment, seg_formats in current_line:
-                                        if segment.strip():  # Only add non-whitespace segments
-                                            line_segments.append((segment, seg_formats))
-                                            line_text += segment
-                                    
-                                    # Now draw the collected segments
-                                    for i, (segment, seg_formats) in enumerate(line_segments):
-                                        # Apply font formatting
-                                        if 'italic' in seg_formats:
-                                            current_font = italic_font
-                                            if 'bold' in seg_formats:
-                                                current_font = bold_italic_font
-                                        elif 'bold' in seg_formats:
-                                            current_font = bold_font
-                                        else:
-                                            current_font = base_font
-                                        
-                                        c.setFont(current_font, font_size)
-                                        
-                                        # Add space between words, but not after the last word
-                                        if i > 0:
-                                            x_pos += c.stringWidth(" ", current_font, font_size)
-                                        
-                                        c.drawString(x_pos, y_pos, segment.strip())
-                                        
-                                        if 'underline' in seg_formats:
-                                            width = c.stringWidth(segment.strip(), current_font, font_size)
-                                            y_underline = y_pos - 1.5
-                                            c.setLineWidth(0.5)
-                                            c.line(x_pos, y_underline, x_pos + width, y_underline)
-                                        
-                                        x_pos += c.stringWidth(segment.strip(), current_font, font_size)
-                                    
-                                    y_pos -= line_height
-                                    current_line = []
-                                
-                                # Start new line with current word
-                                current_line.append((word, formats))
-                            else:
-                                # Add word to current line
-                                if current_line:
-                                    current_line.append((" ", []))  # Add unformatted space
-                                current_line.append((word, formats))
-                    
-                    # Draw any remaining text in current line
-                    if current_line:
-                        x_pos = x_offset
-                        line_segments = []
-                        
-                        # First collect all segments
-                        for segment, seg_formats in current_line:
-                            if segment.strip():  # Only add non-whitespace segments
-                                line_segments.append((segment, seg_formats))
-                        
-                        # Now draw the collected segments
-                        for i, (segment, seg_formats) in enumerate(line_segments):
-                            # Apply font formatting
-                            if 'italic' in seg_formats:
-                                current_font = italic_font
-                                if 'bold' in seg_formats:
-                                    current_font = bold_italic_font
-                            elif 'bold' in seg_formats:
-                                current_font = bold_font
-                            else:
-                                current_font = base_font
-                            
                             c.setFont(current_font, font_size)
                             
-                            # Add space between words, but not after the last word
-                            if i > 0:
-                                x_pos += c.stringWidth(" ", current_font, font_size)
+                            # Draw text segment
+                            c.drawString(x_pos, y_pos, segment)
                             
-                            c.drawString(x_pos, y_pos, segment.strip())
-                            
-                            if 'underline' in seg_formats:
-                                width = c.stringWidth(segment.strip(), current_font, font_size)
+                            # Add underline if needed
+                            if 'underline' in formats:
+                                width = c.stringWidth(segment, current_font, font_size)
                                 y_underline = y_pos - 1.5
                                 c.setLineWidth(0.5)
                                 c.line(x_pos, y_underline, x_pos + width, y_underline)
                             
-                            x_pos += c.stringWidth(segment.strip(), current_font, font_size)
+                            x_pos += c.stringWidth(segment, current_font, font_size)
+                        
                         y_pos -= line_height
+                    
 
                     c.save()
                     packet.seek(0)
