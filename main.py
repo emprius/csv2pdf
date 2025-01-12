@@ -49,8 +49,10 @@ def wrap_text(text, max_chars):
             lines.append('')
             continue
             
-        # Skip whitespace at start of line
+        # Skip whitespace at start of line, but preserve indentation
         if not current_line and word.isspace():
+            if word.startswith('    '):  # Preserve tab indentation (4 spaces)
+                current_line = word
             continue
             
         # Check if adding word would exceed max_chars
@@ -139,6 +141,7 @@ def generate_pdfs(root_window, template_path, csv_path, output_dir, filename_pre
                     # Get text with formatting by segments
                     formatted_text = []
                     start = "1.0"
+                    line_start = True  # Track if we're at the start of a line
                     
                     while True:
                         if temp_widget.compare(start, ">=", "end-1c"):
@@ -149,6 +152,29 @@ def generate_pdfs(root_window, template_path, csv_path, output_dir, filename_pre
                         for tag in ["bold", "italic", "underline"]:
                             if tag in temp_widget.tag_names(start):
                                 formats.append(tag)
+                        
+                        # Get current character
+                        char = temp_widget.get(start)
+                        
+                        # Handle line start indentation
+                        if line_start and char.isspace():
+                            # Find all spaces at start of line
+                            next_pos = start
+                            spaces = ""
+                            while True:
+                                if temp_widget.compare(next_pos, ">=", "end-1c"):
+                                    break
+                                char = temp_widget.get(next_pos)
+                                if not char.isspace():
+                                    break
+                                spaces += char
+                                next_pos = temp_widget.index(f"{next_pos}+1c")
+                            
+                            if spaces:
+                                formatted_text.append((spaces, formats))
+                                start = next_pos
+                                line_start = False
+                                continue
                         
                         # Find next format change or space
                         next_pos = start
@@ -181,6 +207,9 @@ def generate_pdfs(root_window, template_path, csv_path, output_dir, filename_pre
                                 # Add space as a separate segment without formatting
                                 formatted_text.append((space_char, []))
                                 next_pos = temp_widget.index(f"{next_pos}+1c")
+                                # Check if this is a newline
+                                if space_char == '\n':
+                                    line_start = True
                             
                         start = next_pos
                         
