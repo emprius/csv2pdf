@@ -49,7 +49,7 @@ def wrap_text(text, max_chars):
             lines.append('')
             continue
             
-        # Skip other whitespace at start of line
+        # Skip whitespace at start of line
         if not current_line and word.isspace():
             continue
             
@@ -76,11 +76,13 @@ def process_escape_sequences(text):
     lines = text.split('\n')
     processed_lines = []
     for line in lines:
-        # Count and process all tabs in the line
+        # Process tabs at the beginning of the line first
+        while line.startswith('\\t'):
+            line = '    ' + line[2:]  # Replace \t with 4 spaces
+            
+        # Then process any remaining tabs in the line
         while '\\t' in line:
-            # Find position of tab
             tab_pos = line.find('\\t')
-            # Add spaces at tab position
             line = line[:tab_pos] + '    ' + line[tab_pos+2:]
         processed_lines.append(line)
     
