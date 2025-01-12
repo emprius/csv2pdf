@@ -1,22 +1,108 @@
-# PDF Generator with Customizable Text Overlay
+# PDF Generator
 
-## Overview
-This Python application generates personalized PDF files based on a template PDF and entries from a CSV file. The generated PDFs include custom text that can be formatted and positioned dynamically.
+A GUI application that generates PDFs from a template by combining it with text content and data from a CSV file. The application allows you to add formatted text with tags that get replaced with values from the CSV file.
 
 ## Features
-- Select a template PDF, CSV file, and output directory via a simple GUI.
-- Customize the output file names with a user-defined tag.
-- Format text dynamically using placeholders: `{name}`, `{surnames}`, `{amount}`.
-- Specify font type, size, text position (X and Y in %), and maximum line width.
-- Generate one PDF per entry in the CSV file.
 
-## Requirements
-- Python 3.7+
-- Dependencies listed in `requirements.txt`.
+- Load a PDF template
+- Insert text with formatting (bold, italic, underline)
+- Use tags that get replaced with values from CSV file
+- Support for special characters (\n for new line, \t for tab)
+- Preserve text formatting and indentation
+- Save and restore settings between sessions
+- Customizable font, size, and position
 
-## Installation
-1. Clone this repository:
-   ```bash
-   git clone <repository_url>
-   cd pdf_generator_project
+## How to Use
 
+1. **Select Template PDF**: Click "Browse" to select your PDF template file
+2. **Select CSV File**: Click "Browse" to select your CSV file with data
+3. **Select Output Directory**: Choose where to save the generated PDFs
+4. **Enter Text**: Type or paste your text in the text area
+   - Use `{column_name}` to insert values from CSV
+   - Use `\n` for new line
+   - Use `\t` for tab (4 spaces)
+   - Select text and use B/I/U buttons for formatting
+5. **Configure Settings**:
+   - Font: Choose between Helvetica, Times-Roman, or Courier
+   - Font Size: Set the text size
+   - Text Position: Set X and Y positions (in %)
+   - Chars per Line: Set maximum characters per line
+   - Filename: Set output filename pattern using tags
+6. **Generate PDFs**: Click "Generate PDFs" button
+
+## Example
+
+### CSV File (data.csv):
+```csv
+name,age,city
+John Doe,30,New York
+Jane Smith,25,Los Angeles
+```
+
+### Text Content Example:
+```
+\tDear {name},
+
+I hope this letter finds you well. I understand you are {age} years old
+and living in {city}.
+
+\tBest regards,
+\tPDF Generator
+```
+
+### Output
+This will generate a PDF for each row in the CSV file, replacing the tags with the corresponding values:
+
+For first row:
+```
+    Dear John Doe,
+
+I hope this letter finds you well. I understand you are 30 years old
+and living in New York.
+
+    Best regards,
+    PDF Generator
+```
+
+For second row:
+```
+    Dear Jane Smith,
+
+I hope this letter finds you well. I understand you are 25 years old
+and living in Los Angeles.
+
+    Best regards,
+    PDF Generator
+```
+
+### Filename Pattern Example:
+```
+letter_{name}_{city}
+```
+This will generate files like:
+- letter_John_Doe_New_York.pdf
+- letter_Jane_Smith_Los_Angeles.pdf
+
+## Tips
+
+1. **Tags**:
+   - Must match CSV column names exactly: `{name}`, `{age}`, `{city}`
+   - Are case-sensitive
+   - Will be replaced with the corresponding value from the CSV
+
+2. **Special Characters**:
+   - `\n`: Creates a new line
+   - `\t`: Adds 4 spaces of indentation
+   - Can be used anywhere in the text
+
+3. **Text Formatting**:
+   - Select text and click B for bold
+   - Select text and click I for italic
+   - Select text and click U for underline
+   - Can combine multiple formats
+   - Formatting is preserved in the PDF
+
+4. **Settings**:
+   - All settings are automatically saved
+   - Will be restored next time you open the program
+   - Includes file paths, text content, and formatting preferences
