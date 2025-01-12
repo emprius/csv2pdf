@@ -22,34 +22,72 @@ def select_directory(directory_var):
 
 
 def wrap_text(text, max_chars):
+    # Split text into words while preserving spaces
+    words = []
+    current_word = ''
+    for char in text:
+        if char.isspace():
+            if current_word:
+                words.append(current_word)
+                current_word = ''
+            words.append(char)
+        else:
+            current_word += char
+    if current_word:
+        words.append(current_word)
+
     lines = []
-    for line in text.split('\n'):
-        if not line.strip():
+    current_line = ''
+    
+    for word in words:
+        # Handle newlines explicitly
+        if word == '\n':
+            if current_line:
+                lines.append(current_line)
+                current_line = ''
             lines.append('')
             continue
-        current_line = ''
-        words = line.split()
-        for word in words:
-            if not current_line:
-                current_line = word
-            elif len(current_line) + 1 + len(word) <= max_chars:
-                current_line += ' ' + word
-            else:
+            
+        # Skip other whitespace at start of line
+        if not current_line and word.isspace():
+            continue
+            
+        # Check if adding word would exceed max_chars
+        test_line = current_line + word if current_line else word
+        if len(test_line) <= max_chars:
+            current_line = test_line
+        else:
+            if current_line:
                 lines.append(current_line)
-                current_line = word
-        if current_line:
-            lines.append(current_line)
+            current_line = word if not word.isspace() else ''
+
+    if current_line:
+        lines.append(current_line)
+        
     return lines
 
 
 def process_escape_sequences(text):
-    replacements = {
-        '\\n': '\n',
-        '\\t': '\t',
-        '\\r': '\r'
-    }
-    for old, new in replacements.items():
-        text = text.replace(old, new)
+    # Process \n first to handle line breaks
+    text = text.replace('\\n', '\n')
+    
+    # Process \t by adding 4 spaces for each tab
+    lines = text.split('\n')
+    processed_lines = []
+    for line in lines:
+        # Count and process all tabs in the line
+        while '\\t' in line:
+            # Find position of tab
+            tab_pos = line.find('\\t')
+            # Add spaces at tab position
+            line = line[:tab_pos] + '    ' + line[tab_pos+2:]
+        processed_lines.append(line)
+    
+    # Join lines back together
+    text = '\n'.join(processed_lines)
+    
+    # Process other escape sequences
+    text = text.replace('\\r', '\r')
     return text
 
 
@@ -71,37 +109,68 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
 
             for row in reader:
                 try:
-                    # Get formatted text first
-                    formatted_lines = []
+                    # Get text and formatting
                     text = text_widget.get("1.0", "end-1c")
                     
-                    # Replace CSV tags
-                    for key, value in row.items():
-                        placeholder = "{" + key + "}"
-                        text = text.replace(placeholder, value)
-                    
-                    # Process escape sequences
-                    text = process_escape_sequences(text)
-                    
-                    # Process text line by line
-                    for line in text.split('\n'):
-                        if not line.strip():
-                            formatted_lines.append(('', []))
-                            continue
+                    # Get text with formatting by segments
+                    formatted_text = []
+                    start = "1.0"
+                    while True:
+                        if text_widget.compare(start, ">=", "end-1c"):
+                            break
                             
-                        # Find this line in the text widget
-                        line_start = text_widget.search(line, "1.0", "end")
-                        if line_start:
-                            # Get formatting for this line
-                            formats = []
-                            if "bold" in text_widget.tag_names(line_start):
-                                formats.append('bold')
-                            if "italic" in text_widget.tag_names(line_start):
-                                formats.append('italic')
-                            formatted_lines.append((line, formats))
-                        else:
-                            # Line not found in widget (probably from CSV replacement)
-                            formatted_lines.append((line, []))
+                        # Get current formatting
+                        formats = []
+                        for tag in ["bold", "italic", "underline"]:
+                            if tag in text_widget.tag_names(start):
+                                formats.append(tag)
+                        
+                        # Find next format change or space
+                        next_pos = start
+                        while True:
+                            if text_widget.compare(next_pos, ">=", "end-1c"):
+                                break
+                            
+                            next_char = text_widget.get(next_pos)
+                            next_formats = []
+                            for tag in ["bold", "italic", "underline"]:
+                                if tag in text_widget.tag_names(next_pos):
+                                    next_formats.append(tag)
+                                    
+                            # Break if formatting changes or we hit a space
+                            if next_formats != formats or next_char.isspace():
+                                break
+                                
+                            next_pos = text_widget.index(f"{next_pos}+1c")
+                        
+                        # Get text segment
+                        text = text_widget.get(start, next_pos)
+                        if text:
+                            # Add segment with its formatting
+                            formatted_text.append((text, formats))
+                            
+                        # If we stopped at a space, add it as a separate segment
+                        if text_widget.compare(next_pos, "<", "end-1c"):
+                            space_char = text_widget.get(next_pos)
+                            if space_char.isspace():
+                                # Add space as a separate segment without formatting
+                                formatted_text.append((space_char, []))
+                                next_pos = text_widget.index(f"{next_pos}+1c")
+                            
+                        start = next_pos
+                    
+                    # Process text with tags and escape sequences
+                    processed_text = []
+                    for text, formats in formatted_text:
+                        # Replace tags
+                        for key, value in row.items():
+                            placeholder = "{" + key + "}"
+                            text = text.replace(placeholder, str(value))
+                        
+                        # Process escape sequences
+                        text = process_escape_sequences(text)
+                        
+                        processed_text.append((text, formats))
                     
                     # Setup PDF
                     # Format filename with tags
@@ -131,11 +200,22 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                     packet = BytesIO()
                     c = canvas.Canvas(packet, pagesize=letter)
                     
-                    # Set up fonts
-                    base_font = font_name
-                    bold_font = f"{font_name}-Bold"
-                    italic_font = f"{font_name}-Oblique" if font_name == "Helvetica" else f"{font_name}-Italic"
-                    bold_italic_font = f"{font_name}-BoldOblique" if font_name == "Helvetica" else f"{font_name}-BoldItalic"
+                    # Set up fonts - use reportlab's built-in fonts
+                    if font_name == "Helvetica":
+                        base_font = "Helvetica"
+                        bold_font = "Helvetica-Bold"
+                        italic_font = "Helvetica-Oblique"
+                        bold_italic_font = "Helvetica-BoldOblique"
+                    elif font_name == "Times-Roman":
+                        base_font = "Times-Roman"
+                        bold_font = "Times-Bold"
+                        italic_font = "Times-Italic"
+                        bold_italic_font = "Times-BoldItalic"
+                    else:  # Courier
+                        base_font = "Courier"
+                        bold_font = "Courier-Bold"
+                        italic_font = "Courier-Oblique"
+                        bold_italic_font = "Courier-BoldOblique"
                     
                     c.setFont(base_font, font_size)
                     
@@ -144,29 +224,167 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                     y_start = y * letter[1]
                     y_pos = letter[1] - y_start
                     
-                    # Draw text
-                    for line, formats in formatted_lines:
-                        if not line:
+                    # Draw text with continuous flow
+                    x_offset = x * letter[0]
+                    current_line = []  # List of (text, format) tuples for current line
+                    
+                    for text, formats in processed_text:
+                        if not text.strip():
+                            # Draw current line if exists
+                            if current_line:
+                                x_pos = x_offset
+                                for segment, seg_formats in current_line:
+                                    # Apply font formatting
+                                    # Apply font formatting with proper italic handling
+                                    if 'italic' in seg_formats:
+                                        current_font = italic_font
+                                        if 'bold' in seg_formats:
+                                            current_font = bold_italic_font
+                                    elif 'bold' in seg_formats:
+                                        current_font = bold_font
+                                    else:
+                                        current_font = base_font
+                                    
+                                    # Set font and draw text segment
+                                    c.setFont(current_font, font_size)
+                                    c.drawString(x_pos, y_pos, segment)
+                                    
+                                    # Add underline if needed
+                                    if 'underline' in seg_formats:
+                                        width = c.stringWidth(segment, current_font, font_size)
+                                        y_underline = y_pos - 1.5
+                                        c.setLineWidth(0.5)
+                                        c.line(x_pos, y_underline, x_pos + width, y_underline)
+                                    
+                                    x_pos += c.stringWidth(segment, current_font, font_size)
+                                y_pos -= line_height
+                                current_line = []
                             y_pos -= line_height
                             continue
+                        
+                        # Split text into words
+                        words = text.split()
+                        for word in words:
+                            # Calculate width of current line plus new word
+                            test_width = x_offset
+                            for segment, seg_formats in current_line:
+                                # Apply font formatting with proper italic handling
+                                if 'italic' in seg_formats:
+                                    current_font = italic_font
+                                    if 'bold' in seg_formats:
+                                        current_font = bold_italic_font
+                                elif 'bold' in seg_formats:
+                                    current_font = bold_font
+                                else:
+                                    current_font = base_font
+                                test_width += c.stringWidth(segment, current_font, font_size)
                             
-                        # Wrap text
-                        wrapped_lines = wrap_text(line, max_chars)
-                        for wrapped_line in wrapped_lines:
-                            x_offset = x * letter[0]
-                            
-                            # Apply formatting
-                            if 'bold' in formats and 'italic' in formats:
-                                c.setFont(bold_italic_font, font_size)
+                            # Calculate width of new word
+                            if 'italic' in formats:
+                                current_font = italic_font
+                                if 'bold' in formats:
+                                    current_font = bold_italic_font
                             elif 'bold' in formats:
-                                c.setFont(bold_font, font_size)
-                            elif 'italic' in formats:
-                                c.setFont(italic_font, font_size)
+                                current_font = bold_font
                             else:
-                                c.setFont(base_font, font_size)
+                                current_font = base_font
                             
-                            c.drawString(x_offset, y_pos, wrapped_line)
-                            y_pos -= line_height
+                            # Add space width if not first word on line
+                            space_width = c.stringWidth(" ", current_font, font_size) if current_line else 0
+                            word_width = c.stringWidth(word, current_font, font_size)
+                            total_width = test_width + space_width + word_width
+                            
+                            # Check if word fits on current line
+                            if total_width > letter[0] * 0.8:  # 80% of page width
+                                # Draw current line
+                                if current_line:
+                                    x_pos = x_offset
+                                    line_text = ""
+                                    line_segments = []
+                                    
+                                    # First collect all segments
+                                    for segment, seg_formats in current_line:
+                                        if segment.strip():  # Only add non-whitespace segments
+                                            line_segments.append((segment, seg_formats))
+                                            line_text += segment
+                                    
+                                    # Now draw the collected segments
+                                    for i, (segment, seg_formats) in enumerate(line_segments):
+                                        # Apply font formatting
+                                        if 'italic' in seg_formats:
+                                            current_font = italic_font
+                                            if 'bold' in seg_formats:
+                                                current_font = bold_italic_font
+                                        elif 'bold' in seg_formats:
+                                            current_font = bold_font
+                                        else:
+                                            current_font = base_font
+                                        
+                                        c.setFont(current_font, font_size)
+                                        
+                                        # Add space between words, but not after the last word
+                                        if i > 0:
+                                            x_pos += c.stringWidth(" ", current_font, font_size)
+                                        
+                                        c.drawString(x_pos, y_pos, segment.strip())
+                                        
+                                        if 'underline' in seg_formats:
+                                            width = c.stringWidth(segment.strip(), current_font, font_size)
+                                            y_underline = y_pos - 1.5
+                                            c.setLineWidth(0.5)
+                                            c.line(x_pos, y_underline, x_pos + width, y_underline)
+                                        
+                                        x_pos += c.stringWidth(segment.strip(), current_font, font_size)
+                                    
+                                    y_pos -= line_height
+                                    current_line = []
+                                
+                                # Start new line with current word
+                                current_line.append((word, formats))
+                            else:
+                                # Add word to current line
+                                if current_line:
+                                    current_line.append((" ", []))  # Add unformatted space
+                                current_line.append((word, formats))
+                    
+                    # Draw any remaining text in current line
+                    if current_line:
+                        x_pos = x_offset
+                        line_segments = []
+                        
+                        # First collect all segments
+                        for segment, seg_formats in current_line:
+                            if segment.strip():  # Only add non-whitespace segments
+                                line_segments.append((segment, seg_formats))
+                        
+                        # Now draw the collected segments
+                        for i, (segment, seg_formats) in enumerate(line_segments):
+                            # Apply font formatting
+                            if 'italic' in seg_formats:
+                                current_font = italic_font
+                                if 'bold' in seg_formats:
+                                    current_font = bold_italic_font
+                            elif 'bold' in seg_formats:
+                                current_font = bold_font
+                            else:
+                                current_font = base_font
+                            
+                            c.setFont(current_font, font_size)
+                            
+                            # Add space between words, but not after the last word
+                            if i > 0:
+                                x_pos += c.stringWidth(" ", current_font, font_size)
+                            
+                            c.drawString(x_pos, y_pos, segment.strip())
+                            
+                            if 'underline' in seg_formats:
+                                width = c.stringWidth(segment.strip(), current_font, font_size)
+                                y_underline = y_pos - 1.5
+                                c.setLineWidth(0.5)
+                                c.line(x_pos, y_underline, x_pos + width, y_underline)
+                            
+                            x_pos += c.stringWidth(segment.strip(), current_font, font_size)
+                        y_pos -= line_height
 
                     c.save()
                     packet.seek(0)
@@ -224,7 +442,7 @@ def main():
     x_percent_var = StringVar(value="10")
     y_percent_var = StringVar(value="20")
     max_chars_var = StringVar(value="80")
-    headers_var = StringVar(value="Select a CSV file to see tags.")
+    headers_var = StringVar(value="You can use \\n for new line and \\t for tab (4 spaces). Select a CSV file to see available tags.")
 
     def get_custom_text():
         return text_widget.get("1.0", "end-1c")
@@ -243,9 +461,12 @@ def main():
 
     Label(root, text="Text:").grid(row=3, column=0)
     
+    # Add note about special characters
+    Label(root, text="Use \\n for new line, \\t for tab (4 spaces)", font=('TkDefaultFont', 8)).grid(row=3, column=1, sticky='w')
+    
     # Create a frame for the toolbar
     toolbar_frame = Frame(root)
-    toolbar_frame.grid(row=3, column=1, sticky='ew')
+    toolbar_frame.grid(row=3, column=1, sticky='e')
     
     # Create text frame with scrollbar
     text_frame = Frame(root)
@@ -271,48 +492,53 @@ def main():
     scrollbar.pack(side='right', fill='y')
     
     # Define text formatting functions
-    def apply_bold():
+    def apply_format(tag, font_config):
         try:
-            current_tags = text_widget.tag_names("sel.first")
-            if "bold" in current_tags:
-                text_widget.tag_remove("bold", "sel.first", "sel.last")
+            # Get current selection
+            try:
+                selection_start = text_widget.index("sel.first")
+                selection_end = text_widget.index("sel.last")
+            except:
+                messagebox.showinfo("Info", "Please select text to format")
+                return
+            
+            # Check if tag already exists at this position
+            current_tags = text_widget.tag_names(selection_start)
+            
+            if tag in current_tags:
+                # Remove formatting
+                text_widget.tag_remove(tag, selection_start, selection_end)
             else:
-                text_widget.tag_add("bold", "sel.first", "sel.last")
-                text_widget.tag_configure("bold", font=font.Font(weight="bold"))
-        except:
-            messagebox.showinfo("Info", "Please select text to format")
+                # Add formatting
+                text_widget.tag_add(tag, selection_start, selection_end)
+                # Configure font for display
+                if tag == "bold":
+                    text_widget.tag_configure(tag, font=font.Font(weight="bold"))
+                elif tag == "italic":
+                    text_widget.tag_configure(tag, font=font.Font(slant="italic"))
+                elif tag == "underline":
+                    text_widget.tag_configure(tag, underline=True)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+    
+    def apply_bold():
+        apply_format("bold", {"weight": "bold", "family": "TkDefaultFont"})
     
     def apply_italic():
-        try:
-            current_tags = text_widget.tag_names("sel.first")
-            if "italic" in current_tags:
-                text_widget.tag_remove("italic", "sel.first", "sel.last")
-            else:
-                text_widget.tag_add("italic", "sel.first", "sel.last")
-                text_widget.tag_configure("italic", font=font.Font(slant="italic"))
-        except:
-            messagebox.showinfo("Info", "Please select text to format")
+        apply_format("italic", {"slant": "italic", "family": "TkDefaultFont"})
     
     def apply_underline():
-        try:
-            current_tags = text_widget.tag_names("sel.first")
-            if "underline" in current_tags:
-                text_widget.tag_remove("underline", "sel.first", "sel.last")
-            else:
-                text_widget.tag_add("underline", "sel.first", "sel.last")
-                text_widget.tag_configure("underline", underline=True)
-        except:
-            messagebox.showinfo("Info", "Please select text to format")
+        apply_format("underline", {"underline": True, "family": "TkDefaultFont"})
     
-    # Create formatting buttons with custom fonts and tooltips
-    bold_button = TtkButton(toolbar_frame, text="B", width=3, command=apply_bold, style='Toolbar.TButton')
-    italic_button = TtkButton(toolbar_frame, text="I", width=3, command=apply_italic, style='Toolbar.TButton')
-    underline_button = TtkButton(toolbar_frame, text="U", width=3, command=apply_underline, style='Toolbar.TButton')
+    # Create button styles
+    style.configure('Bold.TButton', font=('TkDefaultFont', 10, 'bold'))
+    style.configure('Italic.TButton', font=('TkDefaultFont', 10, 'italic'))
+    style.configure('Underline.TButton', font=('TkDefaultFont', 10, 'underline'))
     
-    # Configure button fonts
-    bold_button.configure(text="B")
-    italic_button.configure(text="I")
-    underline_button.configure(text="U")
+    # Create formatting buttons
+    bold_button = TtkButton(toolbar_frame, text="B", width=3, command=apply_bold, style='Bold.TButton')
+    italic_button = TtkButton(toolbar_frame, text="I", width=3, command=apply_italic, style='Italic.TButton')
+    underline_button = TtkButton(toolbar_frame, text="U", width=3, command=apply_underline, style='Underline.TButton')
     
     # Add tooltips
     def create_tooltip(widget, text):
