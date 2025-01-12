@@ -1,6 +1,10 @@
 # CSV2PDF
 
-A GUI application that generates PDFs from a template by combining it with text content and data from a CSV file. The application allows you to add formatted text with tags that get replaced with values from the CSV file.
+A quick&dirty GUI application that generates multiple PDFs from a PDF template by combining it with text content and data from a CSV file (using tags as {name} defined as CSV headers). The application generates 1 PDF for each CSV entry.
+
+- [Download Linux binary](https://github.com/emprius/csv2pdf/raw/refs/heads/main/dist/csv2pdf)
+
+![screenshot](https://github.com/emprius/csv2pdf/blob/main/dist/screenshot.png?raw=true)
 
 ## Installation
 
