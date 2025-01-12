@@ -53,7 +53,7 @@ def process_escape_sequences(text):
     return text
 
 
-def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_text, font_name, font_size, x_percent, y_percent, max_chars):
+def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_text, font_name, font_size, x_percent, y_percent, max_chars, text_widget):
     try:
         if not template_path or not csv_path or not output_dir or not custom_text:
             raise ValueError("All fields are required!")
@@ -71,35 +71,82 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
 
             for row in reader:
                 try:
-                    # Format text with row data
-                    formatted_text = custom_text
+                    # Get formatted text first
+                    formatted_lines = []
+                    text = text_widget.get("1.0", "end-1c")
+                    
+                    # Replace CSV tags
                     for key, value in row.items():
                         placeholder = "{" + key + "}"
-                        formatted_text = formatted_text.replace(placeholder, value)
+                        text = text.replace(placeholder, value)
                     
-                    output_text = process_escape_sequences(formatted_text)
-                    wrapped_lines = wrap_text(output_text, max_chars)
-
+                    # Process escape sequences
+                    text = process_escape_sequences(text)
+                    
+                    # Process text line by line
+                    for line in text.split('\n'):
+                        if not line.strip():
+                            formatted_lines.append(('', []))
+                            continue
+                            
+                        # Find this line in the text widget
+                        line_start = text_widget.search(line, "1.0", "end")
+                        if line_start:
+                            # Get formatting for this line
+                            formats = []
+                            if "bold" in text_widget.tag_names(line_start):
+                                formats.append('bold')
+                            if "italic" in text_widget.tag_names(line_start):
+                                formats.append('italic')
+                            formatted_lines.append((line, formats))
+                        else:
+                            # Line not found in widget (probably from CSV replacement)
+                            formatted_lines.append((line, []))
+                    
+                    # Setup PDF
                     name_column = headers[0]
                     surname_column = headers[1]
                     output_pdf_path = os.path.join(output_dir, f"{filename_prefix} {row[name_column]} {row[surname_column]}.pdf")
-
-                    # Create a new PDF with the text
+                    
                     packet = BytesIO()
                     c = canvas.Canvas(packet, pagesize=letter)
-                    c.setFont(font_name, font_size)
-
-                    # Calculate starting position from top
-                    line_height = font_size * 1.2  # Line spacing
-                    y_start = y * letter[1]  # Y position from top
-                    y_pos = letter[1] - y_start  # Convert to PDF coordinates (0,0 at bottom-left)
-
+                    
+                    # Set up fonts
+                    base_font = font_name
+                    bold_font = f"{font_name}-Bold"
+                    italic_font = f"{font_name}-Oblique" if font_name == "Helvetica" else f"{font_name}-Italic"
+                    bold_italic_font = f"{font_name}-BoldOblique" if font_name == "Helvetica" else f"{font_name}-BoldItalic"
+                    
+                    c.setFont(base_font, font_size)
+                    
+                    # Calculate position
+                    line_height = font_size * 1.2
+                    y_start = y * letter[1]
+                    y_pos = letter[1] - y_start
+                    
                     # Draw text
-                    for line in wrapped_lines:
-                        if line.strip():
-                            text = line.strip()
-                            c.drawString(x * letter[0], y_pos, text)
-                        y_pos -= line_height
+                    for line, formats in formatted_lines:
+                        if not line:
+                            y_pos -= line_height
+                            continue
+                            
+                        # Wrap text
+                        wrapped_lines = wrap_text(line, max_chars)
+                        for wrapped_line in wrapped_lines:
+                            x_offset = x * letter[0]
+                            
+                            # Apply formatting
+                            if 'bold' in formats and 'italic' in formats:
+                                c.setFont(bold_italic_font, font_size)
+                            elif 'bold' in formats:
+                                c.setFont(bold_font, font_size)
+                            elif 'italic' in formats:
+                                c.setFont(italic_font, font_size)
+                            else:
+                                c.setFont(base_font, font_size)
+                            
+                            c.drawString(x_offset, y_pos, wrapped_line)
+                            y_pos -= line_height
 
                     c.save()
                     packet.seek(0)
@@ -155,9 +202,9 @@ def main():
     font_var = StringVar()
     font_size_var = StringVar(value="12")
     x_percent_var = StringVar(value="10")
-    y_percent_var = StringVar(value="10")
-    max_chars_var = StringVar(value="50")
-    headers_var = StringVar(value="Available tags: None (select a CSV file)")
+    y_percent_var = StringVar(value="20")
+    max_chars_var = StringVar(value="80")
+    headers_var = StringVar(value="Tags: None (select a CSV file)")
 
     def get_custom_text():
         return text_widget.get("1.0", "end-1c")
@@ -174,7 +221,7 @@ def main():
     Entry(root, textvariable=output_dir_var, width=50).grid(row=2, column=1)
     Button(root, text="Browse", command=lambda: select_directory(output_dir_var)).grid(row=2, column=2)
 
-    Label(root, text="Custom Text (use CSV column names as tags):").grid(row=3, column=0)
+    Label(root, text="Text:").grid(row=3, column=0)
     
     # Create a frame for the toolbar
     toolbar_frame = Frame(root)
@@ -309,11 +356,7 @@ def main():
     Label(root, textvariable=headers_var, wraplength=400, justify="left").grid(row=5, column=1)
 
     Label(root, text="Font:").grid(row=6, column=0)
-    font_options = [
-        "Helvetica", "Times-Roman", "Courier",
-        "Liberation Sans", "DejaVu Sans", "Arial",
-        "Ubuntu", "Noto Sans", "FreeSans"
-    ]
+    font_options = ["Helvetica", "Times-Roman", "Courier"]  # Built-in PDF fonts with style variants
     font_var.set("Helvetica")  # Default to Helvetica as it's always available
     OptionMenu(root, font_var, *font_options).grid(row=6, column=1)
 
@@ -326,7 +369,7 @@ def main():
     Label(root, text="Y Position (%):").grid(row=9, column=0)
     Entry(root, textvariable=y_percent_var).grid(row=9, column=1)
 
-    Label(root, text="Max Characters per Line:").grid(row=10, column=0)
+    Label(root, text="Chars per Line:").grid(row=10, column=0)
     Entry(root, textvariable=max_chars_var).grid(row=10, column=1)
 
     Label(root, text="Filename Prefix:").grid(row=11, column=0)
@@ -342,7 +385,8 @@ def main():
         font_size_var.get(),
         x_percent_var.get(),
         y_percent_var.get(),
-        max_chars_var.get()
+        max_chars_var.get(),
+        text_widget
     )).grid(row=12, column=1)
 
     root.mainloop()
