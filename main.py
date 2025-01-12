@@ -89,11 +89,10 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                     c = canvas.Canvas(packet, pagesize=letter)
                     c.setFont(font_name, font_size)
 
-                    # Calculate starting position from bottom
-                    y_pos = y * letter[1]
+                    # Calculate starting position from top
                     line_height = font_size * 1.2  # Line spacing
-                    total_height = len(wrapped_lines) * line_height
-                    y_pos = y_pos + total_height  # Start from top of text block
+                    y_start = y * letter[1]  # Y position from top
+                    y_pos = letter[1] - y_start  # Convert to PDF coordinates (0,0 at bottom-left)
 
                     # Draw text
                     for line in wrapped_lines:
