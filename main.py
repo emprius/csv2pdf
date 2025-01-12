@@ -1,7 +1,7 @@
 import os
 import csv
-from tkinter import Tk, filedialog, messagebox, StringVar, Label, Entry, Button, OptionMenu, Text, scrolledtext, Frame, Scrollbar
-import tkinter.font as tkfont
+from tkinter import Tk, filedialog, messagebox, StringVar, Label, Entry, Button, OptionMenu, Frame, Scrollbar, Text, font
+from tkinter.ttk import Button as TtkButton, Style
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
@@ -22,14 +22,11 @@ def select_directory(directory_var):
 
 
 def wrap_text(text, max_chars):
-    # Handle newlines and tabs properly
     lines = []
     for line in text.split('\n'):
-        # Skip empty lines but preserve them in output
         if not line.strip():
             lines.append('')
             continue
-        # Handle line wrapping
         current_line = ''
         words = line.split()
         for word in words:
@@ -46,19 +43,14 @@ def wrap_text(text, max_chars):
 
 
 def process_escape_sequences(text):
-    """Process escape sequences in text."""
-    try:
-        # Handle common escape sequences
-        replacements = {
-            '\\n': '\n',
-            '\\t': '\t',
-            '\\r': '\r'
-        }
-        for old, new in replacements.items():
-            text = text.replace(old, new)
-        return text
-    except:
-        return text
+    replacements = {
+        '\\n': '\n',
+        '\\t': '\t',
+        '\\r': '\r'
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
 
 
 def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_text, font_name, font_size, x_percent, y_percent, max_chars):
@@ -71,62 +63,65 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
         font_size = int(font_size)
         max_chars = int(max_chars)
 
-        # Read the template PDF
         pdf_reader = PdfReader(template_path)
 
-        with open(csv_path, mode="r", encoding='utf-8') as csvfile:
+        with open(csv_path, mode="r", encoding='utf-8-sig') as csvfile:  # utf-8-sig handles BOM character
             reader = csv.DictReader(csvfile)
-            headers = reader.fieldnames  # Dynamically retrieve CSV column names
+            headers = reader.fieldnames
 
             for row in reader:
-                # Replace tags with values from the current CSV row
                 try:
-                    output_text = custom_text.format(**row)
+                    # Format text with row data
+                    formatted_text = custom_text
+                    for key, value in row.items():
+                        placeholder = "{" + key + "}"
+                        formatted_text = formatted_text.replace(placeholder, value)
+                    
+                    output_text = process_escape_sequences(formatted_text)
+                    wrapped_lines = wrap_text(output_text, max_chars)
+
+                    name_column = headers[0]
+                    surname_column = headers[1]
+                    output_pdf_path = os.path.join(output_dir, f"{filename_prefix} {row[name_column]} {row[surname_column]}.pdf")
+
+                    # Create a new PDF with the text
+                    packet = BytesIO()
+                    c = canvas.Canvas(packet, pagesize=letter)
+                    c.setFont(font_name, font_size)
+
+                    # Calculate starting position from bottom
+                    y_pos = y * letter[1]
+                    line_height = font_size * 1.2  # Line spacing
+                    total_height = len(wrapped_lines) * line_height
+                    y_pos = y_pos + total_height  # Start from top of text block
+
+                    # Draw text
+                    for line in wrapped_lines:
+                        if line.strip():
+                            text = line.strip()
+                            c.drawString(x * letter[0], y_pos, text)
+                        y_pos -= line_height
+
+                    c.save()
+                    packet.seek(0)
+
+                    # Create output PDF
+                    output_pdf = PdfWriter()
+                    # Create a fresh copy of the template page
+                    template_page = PdfReader(template_path).pages[0]
+                    
+                    # Create overlay
+                    overlay = PdfReader(packet)
+                    template_page.merge_page(overlay.pages[0])
+                    
+                    # Add merged page to output
+                    output_pdf.add_page(template_page)
+
+                    # Write the output file
+                    with open(output_pdf_path, "wb") as out_file:
+                        output_pdf.write(out_file)
                 except KeyError as e:
                     raise ValueError(f"Tag '{e.args[0]}' not found in CSV headers: {headers}")
-
-                # Process escape sequences in the text
-                output_text = process_escape_sequences(output_text)
-                wrapped_lines = wrap_text(output_text, max_chars)
-
-                # Define the output file name
-                name_column = headers[0]  # First column as the "name"
-                surname_column = headers[1]  # Second column as the "surname"
-                output_pdf_path = os.path.join(output_dir, f"{filename_prefix} {row[name_column]} {row[surname_column]}.pdf")
-
-                # Create a new PDF to overlay the text
-                packet = BytesIO()
-                c = canvas.Canvas(packet, pagesize=letter)
-                
-                # Set font with Unicode support
-                c.setFont(font_name, font_size)
-
-                # Calculate starting Y position from bottom of page
-                y_pos = y * letter[1]  # Y position from bottom
-                # Adjust for number of lines to center text block
-                total_height = len(wrapped_lines) * font_size * 1.2
-                y_pos = y_pos + total_height  # Move up by text block height
-                
-                for line in wrapped_lines:
-                    if line.strip():  # Only adjust position for non-empty lines
-                        # Handle text encoding for PDF
-                        text_to_write = line.strip().encode('utf-8', errors='ignore').decode('utf-8')
-                        c.drawString(x * letter[0], y_pos, text_to_write)
-                    y_pos -= font_size * 1.2  # Move down for next line
-
-                c.save()
-
-                # Merge the overlay with the template
-                packet.seek(0)
-                overlay_pdf = PdfReader(packet)
-                output_pdf = PdfWriter()
-
-                for page in pdf_reader.pages:
-                    page.merge_page(overlay_pdf.pages[0])
-                    output_pdf.add_page(page)
-
-                with open(output_pdf_path, "wb") as out_file:
-                    output_pdf.write(out_file)
 
         messagebox.showinfo("Success", "PDFs generated successfully!")
     except Exception as e:
@@ -138,7 +133,7 @@ def update_csv_headers(csv_path_var, headers_var):
         csv_path = csv_path_var.get()
         if not csv_path:
             raise ValueError("Please select a CSV file first.")
-        with open(csv_path, mode="r", encoding='utf-8') as csvfile:
+        with open(csv_path, mode="r", encoding='utf-8-sig') as csvfile:  # utf-8-sig handles BOM character
             reader = csv.DictReader(csvfile)
             headers = reader.fieldnames
             headers_var.set(f"Available tags: {', '.join(headers)}")
@@ -147,64 +142,12 @@ def update_csv_headers(csv_path_var, headers_var):
 
 
 def main():
-    # Initialize root with proper input method support
-    import sys
-    if sys.platform.startswith('win'):
-        try:
-            from ctypes import windll
-            windll.shcore.SetProcessDpiAwareness(1)
-        except:
-            pass
-    
     root = Tk()
     root.title("PDF Generator")
     
-    # Configure Tkinter for proper text input
-    import locale
-    try:
-        # Set UTF-8 encoding for Tcl/Tk
-        root.tk.call('encoding', 'system', 'utf-8')
-        
-        # Configure locale and encoding
-        if sys.platform.startswith('win'):
-            # Windows-specific configuration
-            import ctypes
-            
-            # Set console code page to UTF-8
-            kernel32 = ctypes.windll.kernel32
-            kernel32.SetConsoleCP(65001)
-            kernel32.SetConsoleOutputCP(65001)
-            
-            # Try multiple locales
-            for loc in ['en_US.UTF-8', 'English_United States.1252', '']:
-                try:
-                    locale.setlocale(locale.LC_ALL, loc)
-                    break
-                except locale.Error:
-                    continue
-        else:
-            # Unix-like systems
-            locale.setlocale(locale.LC_ALL, '')
-            os.environ['LANG'] = 'en_US.UTF-8'
-            os.environ['LC_ALL'] = 'en_US.UTF-8'
-            
-        # Configure Tcl/Tk for proper text handling
-        root.tk.eval('''
-            encoding system utf-8
-            fconfigure stdin -encoding utf-8
-            fconfigure stdout -encoding utf-8
-            fconfigure stderr -encoding utf-8
-        ''')
-        
-    except Exception as e:
-        print(f"Warning: Could not fully configure text input: {e}")
-    
-    # Register Unicode-compatible font
-    try:
-        pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
-        default_font = 'DejaVuSans'
-    except:
-        default_font = 'Helvetica'  # Fallback to built-in font
+    # Configure ttk style for toolbar buttons
+    style = Style()
+    style.configure('Toolbar.TButton', padding=4)
 
     template_var = StringVar()
     csv_var = StringVar()
@@ -218,8 +161,7 @@ def main():
     headers_var = StringVar(value="Available tags: None (select a CSV file)")
 
     def get_custom_text():
-        text = text_widget.get("1.0", "end-1c")
-        return process_escape_sequences(text)
+        return text_widget.get("1.0", "end-1c")
 
     Label(root, text="Template PDF:").grid(row=0, column=0)
     Entry(root, textvariable=template_var, width=50).grid(row=0, column=1)
@@ -233,97 +175,163 @@ def main():
     Entry(root, textvariable=output_dir_var, width=50).grid(row=2, column=1)
     Button(root, text="Browse", command=lambda: select_directory(output_dir_var)).grid(row=2, column=2)
 
-    Label(root, text="Custom Text (use CSV column names as tags, type \\n for newline, \\t for tab):").grid(row=3, column=0)
-    # Create text widget with proper Unicode configuration
+    Label(root, text="Custom Text (use CSV column names as tags):").grid(row=3, column=0)
+    
+    # Create a frame for the toolbar
+    toolbar_frame = Frame(root)
+    toolbar_frame.grid(row=3, column=1, sticky='ew')
+    
+    # Create text frame with scrollbar
     text_frame = Frame(root)
-    text_frame.grid(row=3, column=1, sticky='nsew')
+    text_frame.grid(row=4, column=1, sticky='nsew')
     
-    # Create text widget with comprehensive Unicode support
-    text_widget = Text(text_frame, width=38, height=4,
-                      wrap='word', undo=True,
-                      font='TkDefaultFont',
-                      insertwidth=2,  # Make cursor more visible
-                      maxundo=0,  # Unlimited undo
-                      exportselection=1,  # Allow copy/paste
-                      insertofftime=0,  # Always show cursor
-                      blockcursor=True if sys.platform.startswith('win') else False,
-                      spacing1=2, spacing2=2,  # Add some padding
-                      insertborderwidth=3,
-                      tabs=('1c',))  # Set proper tab stops
-    
-    # Configure additional text widget properties
-    text_widget.configure(background='white')  # Ensure consistent background
-    text_widget.configure(selectbackground='#0078d7')  # Better selection visibility
-    text_widget.configure(relief='sunken')  # Better visual feedback
-    
-    # Configure text widget for better input handling
-    text_widget.configure(inactiveselectbackground=text_widget.cget('selectbackground'))
-    
-    # Configure text widget for Unicode input
-    if sys.platform.startswith('win'):
-        text_widget.configure(imemode='active')
-    text_widget.pack(side='left', fill='both', expand=True)
-    
-    # Add scrollbar
+    # Configure text widget with UTF-8 and IME support
+    text_widget = Text(text_frame, width=50, height=10, wrap='word', undo=True)
+    text_widget.configure(font=('TkDefaultFont', 10))  # Use system default font which supports Unicode
     scrollbar = Scrollbar(text_frame, orient='vertical', command=text_widget.yview)
-    scrollbar.pack(side='right', fill='y')
     text_widget.configure(yscrollcommand=scrollbar.set)
     
-    # Add text change handler for escape sequences
-    def on_text_change(event=None):
-        if not text_widget.edit_modified():  # Skip if this callback caused the change
-            return
+    # Enable input method support
+    def handle_keypress(event):
+        # Allow all key events to be processed normally
+        return None
+    
+    text_widget.bind('<Key>', handle_keypress)
+    text_widget.bind('<KeyPress>', handle_keypress)
+    text_widget.bind('<KeyRelease>', handle_keypress)
+    
+    # Pack the text widget and scrollbar
+    text_widget.pack(side='left', fill='both', expand=True)
+    scrollbar.pack(side='right', fill='y')
+    
+    # Define text formatting functions
+    def apply_bold():
         try:
-            content = text_widget.get("1.0", "end-1c")
-            if '\\n' in content or '\\t' in content:
-                # Get cursor position and selection
-                insert_pos = text_widget.index("insert")
-                try:
-                    sel_start = text_widget.index("sel.first")
-                    sel_end = text_widget.index("sel.last")
-                    has_selection = True
-                except:
-                    has_selection = False
-                
-                # Process escape sequences
-                new_content = process_escape_sequences(content)
-                
-                # Update content if changed
-                if new_content != content:
-                    text_widget.delete("1.0", "end")
-                    text_widget.insert("1.0", new_content)
-                    
-                    # Restore cursor and selection
-                    text_widget.mark_set("insert", insert_pos)
-                    if has_selection:
-                        text_widget.tag_add("sel", sel_start, sel_end)
+            current_tags = text_widget.tag_names("sel.first")
+            if "bold" in current_tags:
+                text_widget.tag_remove("bold", "sel.first", "sel.last")
+            else:
+                text_widget.tag_add("bold", "sel.first", "sel.last")
+                text_widget.tag_configure("bold", font=font.Font(weight="bold"))
         except:
-            pass  # Keep original text if processing fails
-        finally:
-            text_widget.edit_modified(False)
+            messagebox.showinfo("Info", "Please select text to format")
+    
+    def apply_italic():
+        try:
+            current_tags = text_widget.tag_names("sel.first")
+            if "italic" in current_tags:
+                text_widget.tag_remove("italic", "sel.first", "sel.last")
+            else:
+                text_widget.tag_add("italic", "sel.first", "sel.last")
+                text_widget.tag_configure("italic", font=font.Font(slant="italic"))
+        except:
+            messagebox.showinfo("Info", "Please select text to format")
+    
+    def apply_underline():
+        try:
+            current_tags = text_widget.tag_names("sel.first")
+            if "underline" in current_tags:
+                text_widget.tag_remove("underline", "sel.first", "sel.last")
+            else:
+                text_widget.tag_add("underline", "sel.first", "sel.last")
+                text_widget.tag_configure("underline", underline=True)
+        except:
+            messagebox.showinfo("Info", "Please select text to format")
+    
+    # Create formatting buttons with custom fonts and tooltips
+    bold_font = font.Font(weight='bold')
+    italic_font = font.Font(slant='italic')
+    underline_font = font.Font(underline=True)
+    
+    bold_button = TtkButton(toolbar_frame, text="B", width=3, command=apply_bold, style='Toolbar.TButton')
+    italic_button = TtkButton(toolbar_frame, text="I", width=3, command=apply_italic, style='Toolbar.TButton')
+    underline_button = TtkButton(toolbar_frame, text="U", width=3, command=apply_underline, style='Toolbar.TButton')
+    
+    # Configure button fonts
+    bold_button.configure(text="B")
+    italic_button.configure(text="I")
+    underline_button.configure(text="U")
+    
+    # Add tooltips
+    def create_tooltip(widget, text):
+        def show_tooltip(event):
+            tooltip = Label(root, text=text, relief="solid", borderwidth=1)
+            tooltip.place_forget()
             
-    text_widget.bind('<<Modified>>', on_text_change)
-    Label(root, textvariable=headers_var, wraplength=400, justify="left").grid(row=4, column=1)
+            def position_tooltip():
+                widget_x = widget.winfo_rootx()
+                widget_y = widget.winfo_rooty()
+                tooltip.place(x=root.winfo_x() + widget_x, 
+                            y=root.winfo_y() + widget_y + widget.winfo_height())
+            
+            position_tooltip()
+            widget.tooltip = tooltip
+            
+        def hide_tooltip(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind('<Enter>', show_tooltip)
+        widget.bind('<Leave>', hide_tooltip)
+    
+    create_tooltip(bold_button, "Bold (Ctrl+B)")
+    create_tooltip(italic_button, "Italic (Ctrl+I)")
+    create_tooltip(underline_button, "Underline (Ctrl+U)")
+    
+    # Pack formatting buttons with improved spacing
+    bold_button.pack(side='left', padx=4)
+    italic_button.pack(side='left', padx=4)
+    underline_button.pack(side='left', padx=4)
+    
+    # Add keyboard shortcuts without interfering with IME
+    def handle_shortcuts(event):
+        if event.state & 4 and event.keysym in ['b', 'i', 'u']:  # Check for Ctrl key and specific shortcuts
+            if event.keysym == 'b':
+                apply_bold()
+            elif event.keysym == 'i':
+                apply_italic()
+            elif event.keysym == 'u':
+                apply_underline()
+            return 'break'
+        return None  # Allow all other keys to be processed normally
+    
+    text_widget.bind('<Key>', handle_shortcuts)
+    
+    # Clear default text when clicked
+    def clear_default_text(event):
+        if text_widget.get("1.0", "end-1c") == "Type your text here...":
+            text_widget.delete("1.0", "end")
+            text_widget.unbind('<Button-1>')
+    
+    text_widget.insert("1.0", "Type your text here...")
+    text_widget.bind('<Button-1>', clear_default_text)
 
-    Label(root, text="Font:").grid(row=5, column=0)
-    font_options = [default_font, "Helvetica", "Times-Roman", "Courier"]
-    font_var.set(default_font)
-    OptionMenu(root, font_var, *font_options).grid(row=5, column=1)
+    Label(root, textvariable=headers_var, wraplength=400, justify="left").grid(row=5, column=1)
 
-    Label(root, text="Font Size:").grid(row=6, column=0)
-    Entry(root, textvariable=font_size_var).grid(row=6, column=1)
+    Label(root, text="Font:").grid(row=6, column=0)
+    font_options = [
+        "Helvetica", "Times-Roman", "Courier",
+        "Liberation Sans", "DejaVu Sans", "Arial",
+        "Ubuntu", "Noto Sans", "FreeSans"
+    ]
+    font_var.set("Helvetica")  # Default to Helvetica as it's always available
+    OptionMenu(root, font_var, *font_options).grid(row=6, column=1)
 
-    Label(root, text="X Position (%):").grid(row=7, column=0)
-    Entry(root, textvariable=x_percent_var).grid(row=7, column=1)
+    Label(root, text="Font Size:").grid(row=7, column=0)
+    Entry(root, textvariable=font_size_var).grid(row=7, column=1)
 
-    Label(root, text="Y Position (%):").grid(row=8, column=0)
-    Entry(root, textvariable=y_percent_var).grid(row=8, column=1)
+    Label(root, text="X Position (%):").grid(row=8, column=0)
+    Entry(root, textvariable=x_percent_var).grid(row=8, column=1)
 
-    Label(root, text="Max Characters per Line:").grid(row=9, column=0)
-    Entry(root, textvariable=max_chars_var).grid(row=9, column=1)
+    Label(root, text="Y Position (%):").grid(row=9, column=0)
+    Entry(root, textvariable=y_percent_var).grid(row=9, column=1)
 
-    Label(root, text="Filename Prefix:").grid(row=10, column=0)
-    Entry(root, textvariable=filename_prefix_var).grid(row=10, column=1)
+    Label(root, text="Max Characters per Line:").grid(row=10, column=0)
+    Entry(root, textvariable=max_chars_var).grid(row=10, column=1)
+
+    Label(root, text="Filename Prefix:").grid(row=11, column=0)
+    Entry(root, textvariable=filename_prefix_var).grid(row=11, column=1)
 
     Button(root, text="Generate PDFs", command=lambda: generate_pdfs(
         template_var.get(),
@@ -336,7 +344,7 @@ def main():
         x_percent_var.get(),
         y_percent_var.get(),
         max_chars_var.get()
-    )).grid(row=11, column=1)
+    )).grid(row=12, column=1)
 
     root.mainloop()
 
