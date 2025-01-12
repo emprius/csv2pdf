@@ -94,7 +94,7 @@ def process_escape_sequences(text):
     return text
 
 
-def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_text, font_name, font_size, x_percent, y_percent, max_chars, text_widget):
+def generate_pdfs(root_window, template_path, csv_path, output_dir, filename_prefix, custom_text, font_name, font_size, x_percent, y_percent, max_chars, text_widget):
     try:
         if not template_path or not csv_path or not output_dir or not custom_text:
             raise ValueError("All fields are required!")
@@ -112,12 +112,20 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
 
             for row in reader:
                 try:
-                    # Get text and process escape sequences first
+                    # Get original text
                     original_text = text_widget.get("1.0", "end-1c")
-                    processed_text = process_escape_sequences(original_text)
+                    
+                    # Replace tags first
+                    text_with_tags = original_text
+                    for key, value in row.items():
+                        placeholder = "{" + key + "}"
+                        text_with_tags = text_with_tags.replace(placeholder, str(value))
+                    
+                    # Then process escape sequences
+                    processed_text = process_escape_sequences(text_with_tags)
                     
                     # Create a temporary text widget to handle formatting
-                    temp_widget = Text(root)
+                    temp_widget = Text(root_window)
                     temp_widget.insert("1.0", processed_text)
                     
                     # Copy formatting from original widget
@@ -179,16 +187,9 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                     # Clean up temporary widget
                     temp_widget.destroy()
                     
-                    # Process text with tags
+                    # Process text segments
                     processed_text = []
                     for text, formats in formatted_text:
-                        # Replace tags
-                        for key, value in row.items():
-                            placeholder = "{" + key + "}"
-                            text = text.replace(placeholder, str(value))
-                            
-                        # Process escape sequences for each segment
-                        text = process_escape_sequences(text)
                         processed_text.append((text, formats))
                     
                     # Setup PDF
@@ -651,6 +652,7 @@ def main():
     Entry(root, textvariable=filename_prefix_var).grid(row=11, column=1)
 
     Button(root, text="Generate PDFs", command=lambda: generate_pdfs(
+        root,
         template_var.get(),
         csv_var.get(),
         output_dir_var.get(),
