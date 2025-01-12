@@ -440,7 +440,7 @@ def update_csv_headers(csv_path_var, headers_var):
 
 def main():
     root = Tk()
-    root.title("PDF Generator")
+    root.title("CSV2PDF")
     
     # Configure ttk style for toolbar buttons
     style = Style()

@@ -3,7 +3,7 @@
 VENV_DIR := venv
 DIST_DIR := dist
 BUILD_DIR := build
-BINARY_NAME := pdf_generator
+BINARY_NAME := csv2pdf
 
 install: check-pip check-tkinter create-venv
 	$(VENV_DIR)/bin/pip install --upgrade pip
@@ -34,7 +34,7 @@ build: install
 	chmod +x $(DIST_DIR)/$(BINARY_NAME)
 	# Create .desktop file for double-click support
 	echo "[Desktop Entry]" > $(DIST_DIR)/$(BINARY_NAME).desktop
-	echo "Name=PDF Generator" >> $(DIST_DIR)/$(BINARY_NAME).desktop
+	echo "Name=CSV2PDF" >> $(DIST_DIR)/$(BINARY_NAME).desktop
 	echo "Exec=$(BINARY_NAME)" >> $(DIST_DIR)/$(BINARY_NAME).desktop
 	echo "Type=Application" >> $(DIST_DIR)/$(BINARY_NAME).desktop
 	echo "Terminal=false" >> $(DIST_DIR)/$(BINARY_NAME).desktop
