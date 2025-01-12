@@ -341,13 +341,8 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
 
 def save_settings(settings):
     """Save settings to JSON file"""
-    settings_dir = os.path.expanduser("~/.emprius_donacions")
-    settings_file = os.path.join(settings_dir, "settings.json")
-    
+    settings_file = "settings.json"
     try:
-        # Create settings directory if it doesn't exist
-        os.makedirs(settings_dir, exist_ok=True)
-        
         with open(settings_file, 'w') as f:
             json.dump(settings, f, indent=4)
     except Exception as e:
@@ -355,7 +350,7 @@ def save_settings(settings):
 
 def load_settings():
     """Load settings from JSON file"""
-    settings_file = os.path.expanduser("~/.emprius_donacions/settings.json")
+    settings_file = "settings.json"
     default_settings = {
         "font_name": "Helvetica",
         "font_size": "12",
