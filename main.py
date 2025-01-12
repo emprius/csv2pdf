@@ -112,67 +112,83 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
 
             for row in reader:
                 try:
-                    # Get text and formatting
-                    text = text_widget.get("1.0", "end-1c")
+                    # Get text and process escape sequences first
+                    original_text = text_widget.get("1.0", "end-1c")
+                    processed_text = process_escape_sequences(original_text)
+                    
+                    # Create a temporary text widget to handle formatting
+                    temp_widget = Text(root)
+                    temp_widget.insert("1.0", processed_text)
+                    
+                    # Copy formatting from original widget
+                    for tag in ["bold", "italic", "underline"]:
+                        ranges = text_widget.tag_ranges(tag)
+                        for i in range(0, len(ranges), 2):
+                            start = ranges[i]
+                            end = ranges[i+1]
+                            temp_widget.tag_add(tag, start, end)
                     
                     # Get text with formatting by segments
                     formatted_text = []
                     start = "1.0"
+                    
                     while True:
-                        if text_widget.compare(start, ">=", "end-1c"):
+                        if temp_widget.compare(start, ">=", "end-1c"):
                             break
                             
                         # Get current formatting
                         formats = []
                         for tag in ["bold", "italic", "underline"]:
-                            if tag in text_widget.tag_names(start):
+                            if tag in temp_widget.tag_names(start):
                                 formats.append(tag)
                         
                         # Find next format change or space
                         next_pos = start
                         while True:
-                            if text_widget.compare(next_pos, ">=", "end-1c"):
+                            if temp_widget.compare(next_pos, ">=", "end-1c"):
                                 break
                             
-                            next_char = text_widget.get(next_pos)
+                            next_char = temp_widget.get(next_pos)
                             next_formats = []
                             for tag in ["bold", "italic", "underline"]:
-                                if tag in text_widget.tag_names(next_pos):
+                                if tag in temp_widget.tag_names(next_pos):
                                     next_formats.append(tag)
                                     
                             # Break if formatting changes or we hit a space
                             if next_formats != formats or next_char.isspace():
                                 break
                                 
-                            next_pos = text_widget.index(f"{next_pos}+1c")
+                            next_pos = temp_widget.index(f"{next_pos}+1c")
                         
                         # Get text segment
-                        text = text_widget.get(start, next_pos)
+                        text = temp_widget.get(start, next_pos)
                         if text:
                             # Add segment with its formatting
                             formatted_text.append((text, formats))
                             
                         # If we stopped at a space, add it as a separate segment
-                        if text_widget.compare(next_pos, "<", "end-1c"):
-                            space_char = text_widget.get(next_pos)
+                        if temp_widget.compare(next_pos, "<", "end-1c"):
+                            space_char = temp_widget.get(next_pos)
                             if space_char.isspace():
                                 # Add space as a separate segment without formatting
                                 formatted_text.append((space_char, []))
-                                next_pos = text_widget.index(f"{next_pos}+1c")
+                                next_pos = temp_widget.index(f"{next_pos}+1c")
                             
                         start = next_pos
+                        
+                    # Clean up temporary widget
+                    temp_widget.destroy()
                     
-                    # Process text with tags and escape sequences
+                    # Process text with tags
                     processed_text = []
                     for text, formats in formatted_text:
                         # Replace tags
                         for key, value in row.items():
                             placeholder = "{" + key + "}"
                             text = text.replace(placeholder, str(value))
-                        
-                        # Process escape sequences
+                            
+                        # Process escape sequences for each segment
                         text = process_escape_sequences(text)
-                        
                         processed_text.append((text, formats))
                     
                     # Setup PDF
