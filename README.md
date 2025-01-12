@@ -47,7 +47,6 @@ I hope this letter finds you well. I understand you are {age} years old
 and living in {city}.
 
 \tBest regards,
-\tPDF Generator
 ```
 
 ### Output
@@ -61,7 +60,6 @@ I hope this letter finds you well. I understand you are 30 years old
 and living in New York.
 
     Best regards,
-    PDF Generator
 ```
 
 For second row:
@@ -72,7 +70,6 @@ I hope this letter finds you well. I understand you are 25 years old
 and living in Los Angeles.
 
     Best regards,
-    PDF Generator
 ```
 
 ### Filename Pattern Example:

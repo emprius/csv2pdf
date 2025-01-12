@@ -492,7 +492,7 @@ def main():
         root.destroy()
     
     root.protocol("WM_DELETE_WINDOW", on_closing)
-    headers_var = StringVar(value="You can use \\n for new line and \\t for tab (4 spaces). Select a CSV file to see available tags.")
+    headers_var = StringVar(value="Select a CSV file to see available tags.")
 
     def get_custom_text():
         return text_widget.get("1.0", "end-1c")
@@ -512,7 +512,7 @@ def main():
     Label(root, text="Text:").grid(row=3, column=0)
     
     # Add note about special characters
-    Label(root, text="Use \\n for new line, \\t for tab (4 spaces)", font=('TkDefaultFont', 8)).grid(row=3, column=1, sticky='w')
+    Label(root, text="Use \\n to force new line, and \\t for tab", font=('TkDefaultFont', 8)).grid(row=3, column=1, sticky='w')
     
     # Create a frame for the toolbar
     toolbar_frame = Frame(root)
@@ -636,9 +636,11 @@ def main():
     
     text_widget.bind('<Key>', handle_shortcuts)
     
+    text_input_help = "Type your text here. Use {tags} for CSV values. Tags are case-sensitive, e.g. {name} and are defined as the CSV column headers."
+
     # Clear default text when clicked
     def clear_default_text(event):
-        if text_widget.get("1.0", "end-1c") == "Type your text here...":
+        if text_widget.get("1.0", "end-1c") == text_input_help:
             text_widget.delete("1.0", "end")
             text_widget.unbind('<Button-1>')
     
@@ -647,12 +649,12 @@ def main():
     if saved_text:
         text_widget.insert("1.0", saved_text)
     else:
-        text_widget.insert("1.0", "Type your text here...")
+        text_widget.insert("1.0", text_input_help)
         text_widget.bind('<Button-1>', clear_default_text)
 
     # Save text content when it changes
     def on_text_change(event=None):
-        if text_widget.get("1.0", "end-1c") != "Type your text here...":
+        if text_widget.get("1.0", "end-1c") != text_input_help:
             save_current_settings()
     
     text_widget.bind('<<Modified>>', on_text_change)
