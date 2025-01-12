@@ -104,9 +104,29 @@ def generate_pdfs(template_path, csv_path, output_dir, filename_prefix, custom_t
                             formatted_lines.append((line, []))
                     
                     # Setup PDF
-                    name_column = headers[0]
-                    surname_column = headers[1]
-                    output_pdf_path = os.path.join(output_dir, f"{filename_prefix} {row[name_column]} {row[surname_column]}.pdf")
+                    # Format filename with tags
+                    filename = filename_prefix.strip()
+                    if not filename:  # Handle empty filename
+                        filename = "document"
+                    
+                    # Replace tags in filename
+                    try:
+                        # First check if all tags exist in headers
+                        import re
+                        tags = re.findall(r'\{([^}]+)\}', filename)
+                        for tag in tags:
+                            if tag not in row:
+                                raise KeyError(tag)
+                        # Then do the replacement
+                        filename = filename.format(**row)
+                    except KeyError as e:
+                        raise ValueError(f"Tag '{e.args[0]}' not found in CSV headers: {headers}")
+                    
+                    # Handle .pdf extension
+                    if not filename.lower().endswith('.pdf'):
+                        filename += '.pdf'
+                    
+                    output_pdf_path = os.path.join(output_dir, filename)
                     
                     packet = BytesIO()
                     c = canvas.Canvas(packet, pagesize=letter)
@@ -198,13 +218,13 @@ def main():
     template_var = StringVar()
     csv_var = StringVar()
     output_dir_var = StringVar()
-    filename_prefix_var = StringVar()
+    filename_prefix_var = StringVar(value="e.g. emprius_{name}.pdf")
     font_var = StringVar()
     font_size_var = StringVar(value="12")
     x_percent_var = StringVar(value="10")
     y_percent_var = StringVar(value="20")
     max_chars_var = StringVar(value="80")
-    headers_var = StringVar(value="Tags: None (select a CSV file)")
+    headers_var = StringVar(value="Select a CSV file to see tags.")
 
     def get_custom_text():
         return text_widget.get("1.0", "end-1c")
@@ -285,10 +305,6 @@ def main():
             messagebox.showinfo("Info", "Please select text to format")
     
     # Create formatting buttons with custom fonts and tooltips
-    bold_font = font.Font(weight='bold')
-    italic_font = font.Font(slant='italic')
-    underline_font = font.Font(underline=True)
-    
     bold_button = TtkButton(toolbar_frame, text="B", width=3, command=apply_bold, style='Toolbar.TButton')
     italic_button = TtkButton(toolbar_frame, text="I", width=3, command=apply_italic, style='Toolbar.TButton')
     underline_button = TtkButton(toolbar_frame, text="U", width=3, command=apply_underline, style='Toolbar.TButton')
@@ -363,16 +379,16 @@ def main():
     Label(root, text="Font Size:").grid(row=7, column=0)
     Entry(root, textvariable=font_size_var).grid(row=7, column=1)
 
-    Label(root, text="X Position (%):").grid(row=8, column=0)
+    Label(root, text="Text X Position (%):").grid(row=8, column=0)
     Entry(root, textvariable=x_percent_var).grid(row=8, column=1)
 
-    Label(root, text="Y Position (%):").grid(row=9, column=0)
+    Label(root, text="Text Y Position (%):").grid(row=9, column=0)
     Entry(root, textvariable=y_percent_var).grid(row=9, column=1)
 
     Label(root, text="Chars per Line:").grid(row=10, column=0)
     Entry(root, textvariable=max_chars_var).grid(row=10, column=1)
 
-    Label(root, text="Filename Prefix:").grid(row=11, column=0)
+    Label(root, text="Filename with tags:").grid(row=11, column=0)
     Entry(root, textvariable=filename_prefix_var).grid(row=11, column=1)
 
     Button(root, text="Generate PDFs", command=lambda: generate_pdfs(
